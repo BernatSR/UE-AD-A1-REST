@@ -266,7 +266,17 @@ def stats_movies_for_date(date):
             })
 
     # Ordonner par count décroissant
-    items_sorted = sorted(items, key=lambda x: x["count"], reverse=True)
+    items_sorted = items[:]
+
+    for i in range(len(items_sorted)):
+        # Chercher l'élément avec le plus grand "count" dans le reste de la liste
+        max_index = i
+        for j in range(i + 1, len(items_sorted)):
+            if items_sorted[j]["count"] > items_sorted[max_index]["count"]:
+                max_index = j
+        # Échanger avec la position courante
+        items_sorted[i], items_sorted[max_index] = items_sorted[max_index], items_sorted[i]
+
 
     return make_response(jsonify({
         "date": date,

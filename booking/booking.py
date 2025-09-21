@@ -232,6 +232,48 @@ def delete_booking(userid, date, movieid):
         "movie": movieid
     }), 200)
 
+
+
+@app.route("/stats/date/<date>/movies", methods=["GET"])
+def stats_movies_for_date(date):
+    if not validate_date_str(date):
+        return error("invalid date format, expected YYYYMMDD", 400)
+
+    # Compter les réservations par film
+    counts = {} 
+    for booking in bookings:
+        for d in booking.get("dates", []):
+            if d.get("date") == date:
+                for movie_id in d.get("movies", []):
+                    if movie_id in counts:
+                        counts[movie_id] += 1
+                    else:
+                        counts[movie_id] = 1
+
+    # Construire la liste de sortie avec détails films
+    items = []
+    for movie_id, n in counts.items():
+        info = get_movie(movie_id)
+        if info:
+            items.append({
+                "movie": info,  
+                "count": n
+            })
+        else:
+            items.append({
+                "movie": {"id": movie_id, "error": "movie not found"},
+                "count": n
+            })
+
+    # Ordonner par count décroissant
+    items_sorted = sorted(items, key=lambda x: x["count"], reverse=True)
+
+    return make_response(jsonify({
+        "date": date,
+        "movies": items_sorted
+    }), 200)
+
+
 if __name__ == "__main__":
     print(f"Server running in port {PORT}")
     app.run(host=HOST, port=PORT)

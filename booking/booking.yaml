@@ -1,0 +1,296 @@
+openapi: 3.0.3
+info:
+  title: Booking Service API
+  version: 1.0.0
+  description: >
+    Service de réservation. Stocke des réservations par utilisateur, dates (YYYYMMDD) et IDs de films.
+    Vérifie les dates/films auprès de Schedule et peut enrichir les réponses avec Movie.
+
+servers:
+  - url: http://localhost:3201
+
+paths:
+  /:
+    get:
+      summary: Page d’accueil
+      responses:
+        "200":
+          description: HTML de bienvenue
+
+  /bookings:
+    get:
+      summary: Lister toutes les réservations (admin)
+      parameters:
+        - in: header
+          name: X-Admin
+          schema: { type: string, enum: ["true","false"] }
+          required: true
+          description: Doit être "true" pour accéder.
+      responses:
+        "200":
+          description: Liste de toutes les réservations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BookingEntry' }
+        "403":
+          description: Non autorisé
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /bookings/{userid}:
+    get:
+      summary: Récupérer les réservations d’un utilisateur
+      parameters:
+        - in: path
+          name: userid
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Réservations de l’utilisateur (peut être vide)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingEntry' }
+          examples:
+            empty:
+              value: { userid: "alice", dates: [] }
+
+  /bookings/{userid}/details:
+    get:
+      summary: Réservations d’un utilisateur avec détails Movie
+      parameters:
+        - in: path
+          name: userid
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Dates et films enrichis (ou vide)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingDetailed' }
+
+  /bookings/{userid}/{date}:
+    post:
+      summary: Ajouter une réservation pour une date (vérifie Schedule)
+      parameters:
+        - in: path
+          name: userid
+          required: true
+          schema: { type: string }
+        - in: path
+          name: date
+          required: true
+          schema: { type: string, pattern: '^\d{8}$' }
+          description: Format YYYYMMDD
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/AddOneMovie'
+                - $ref: '#/components/schemas/AddManyMovies'
+            examples:
+              single:
+                value: { movie: "a8034f44-aee4-44cf-b32c-74cf452aaaae" }
+              many:
+                value: { movies: ["a8034f44-aee4-44cf-b32c-74cf452aaaae","276c79ec-a26a-40a6-b3d3-fb242a5947b6"] }
+      responses:
+        "200":
+          description: Réservation ajoutée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddBookingResponse' }
+        "400":
+          description: Date invalide ou corps manquant
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        "409":
+          description: Date absente du planning ou films non programmés
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Error'
+                  - $ref: '#/components/schemas/NotScheduled'
+        "503":
+          description: Service Schedule injoignable
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /bookings/{userid}/{date}/{movieid}:
+    delete:
+      summary: Supprimer un film réservé pour un utilisateur à une date
+      parameters:
+        - in: path
+          name: userid
+          required: true
+          schema: { type: string }
+        - in: path
+          name: date
+          required: true
+          schema: { type: string, pattern: '^\d{8}$' }
+        - in: path
+          name: movieid
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Réservation supprimée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeleteBookingResponse' }
+        "404":
+          description: Aucune réservation correspondante
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /stats/date/{date}/movies:
+    get:
+      summary: Stat des réservations par film pour une date (avec détails Movie)
+      parameters:
+        - in: path
+          name: date
+          required: true
+          schema: { type: string, pattern: '^\d{8}$' }
+      responses:
+        "200":
+          description: Classement des films pour cette date
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date: { type: string }
+                  movies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        movie:
+                          oneOf:
+                            - $ref: '#/components/schemas/Movie'
+                            - type: object
+                              properties:
+                                id: { type: string }
+                                error: { type: string }
+                        count: { type: integer, minimum: 1 }
+        "400":
+          description: Date invalide
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    BookingEntry:
+      type: object
+      properties:
+        userid: { type: string }
+        dates:
+          type: array
+          items: { $ref: '#/components/schemas/DateEntry' }
+      required: [userid, dates]
+      example:
+        userid: "dwight_schrute"
+        dates:
+          - date: "20151205"
+            movies:
+              - "a8034f44-aee4-44cf-b32c-74cf452aaaae"
+              - "276c79ec-a26a-40a6-b3d3-fb242a5947b6"
+
+    DateEntry:
+      type: object
+      properties:
+        date: { type: string, pattern: '^\d{8}$' }
+        movies:
+          type: array
+          items: { type: string }
+      required: [date, movies]
+
+    BookingDetailed:
+      type: object
+      properties:
+        userid: { type: string }
+        dates:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string }
+              movies:
+                type: array
+                items:
+                  oneOf:
+                    - $ref: '#/components/schemas/Movie'
+                    - type: object
+                      properties:
+                        id: { type: string }
+                        error: { type: string }
+      example:
+        userid: "dwight_schrute"
+        dates:
+          - date: "20151205"
+            movies:
+              - { id: "a8034f44-aee4-44cf-b32c-74cf452aaaae", title: "Interstellar", director: "Christopher Nolan" }
+              - { id: "unknown-id", error: "movie not found" }
+
+    AddOneMovie:
+      type: object
+      properties:
+        movie: { type: string }
+      required: [movie]
+
+    AddManyMovies:
+      type: object
+      properties:
+        movies:
+          type: array
+          items: { type: string }
+      required: [movies]
+
+    AddBookingResponse:
+      type: object
+      properties:
+        message: { type: string }
+        userid: { type: string }
+        date: { type: string }
+        added_movies:
+          type: array
+          items: { type: string }
+        current_movies:
+          type: array
+          items: { type: string }
+      example:
+        message: "booking added"
+        userid: "dwight_schrute"
+        date: "20151205"
+        added_movies: ["a8034f44-aee4-44cf-b32c-74cf452aaaae"]
+        current_movies:
+          - "a8034f44-aee4-44cf-b32c-74cf452aaaae"
+          - "276c79ec-a26a-40a6-b3d3-fb242a5947b6"
+
+    DeleteBookingResponse:
+      type: object
+      properties:
+        message: { type: string }
+        userid: { type: string }
+        date: { type: string }
+        movie: { type: string }
+      example:
+        message: "booking deleted"
+        userid: "dwight_schrute"
+        date: "20151205"
+        movie: "a8034f44-aee4-44cf-b32c-74cf452aaaae"
+
+    Movie:
+      type: object
+      description: Schéma de film renvoyé par le Movie service (forme indicative).
+      properties:
+        id: { type: string }
+        title: { type: string }
+        director: { type: string }
+        rating: { type: string }

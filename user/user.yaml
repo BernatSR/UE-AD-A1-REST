@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: User Service API
+  version: 1.0.0
+  description: Service Utilisateurs minimal (ajout, maj nom, suppression).
+
+servers:
+  - url: http://localhost:3203
+
+paths:
+  /:
+    get:
+      summary: Accueil
+      responses:
+        "200": { description: OK }
+
+  /adduser/{userid}:
+    post:
+      summary: Créer un utilisateur
+      parameters:
+        - in: path
+          name: userid
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Champs libres, le service injecte id et last_active
+              additionalProperties: true
+            example:
+              name: "Alice"
+              email: "alice@example.com"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        "409":
+          description: Conflit (id existant)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /users/{userid}/{name}:
+    put:
+      summary: Mettre à jour le nom
+      parameters:
+        - in: path
+          name: userid
+          required: true
+          schema: { type: string }
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Utilisateur mis à jour
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        "201":
+          description: id non trouvé (comportement actuel du code)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /users/{userid}:
+    delete:
+      summary: Supprimer un utilisateur
+      parameters:
+        - in: path
+          name: userid
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Utilisateur supprimé
+          content: { application/json: { schema: { $ref: '#/components/schemas/User' } } }
+        "400":
+          description: id non trouvé
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        last_active: { type: string, description: ISO 8601 }
+      required: [id, last_active]
+      example:
+        id: "alice"
+        name: "Alice"
+        email: "alice@example.com"
+        last_active: "2025-09-21T12:34:56.000000"
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]

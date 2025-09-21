@@ -63,7 +63,7 @@ def get_movie(movie_id: str):
 def check_schedule(date_str, movie_ids):
 
     try:
-        url = "http://localhost:3202/schedule/" + date_str
+        url = "http://localhost:3202/showmovies/" + date_str
         r = requests.get(url, timeout=3)
     except requests.RequestException:
         return False, [], "schedule service unreachable"
